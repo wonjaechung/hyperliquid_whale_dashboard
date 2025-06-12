@@ -16,7 +16,9 @@ CSV_PATH = "top30_wallets.csv"
 BASE_URL = constants.MAINNET_API_URL
 
 # ── OpenAI 설정 ───────────────────────────────────────────────────────────
-openai.api_key = st.secrets["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"]
+# OpenAI 세팅
+openai.api_key = st.secrets["openai"]["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"]
+MODEL_NAME = "gpt-4o-mini"
 
 # ── HTTP helpers ───────────────────────────────────────────────────────────
 def info_http(payload: dict):
