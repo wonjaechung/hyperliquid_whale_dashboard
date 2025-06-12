@@ -3,4 +3,4 @@ pandas
 matplotlib
 selenium
 webdriver-manager
-st-aggrid
+streamlit-aggrid
