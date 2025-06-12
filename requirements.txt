@@ -5,3 +5,4 @@ pandas
 matplotlib
 hyperliquid-utils
 st-aggrid
+git+https://github.com/your-org/hyperliquid-utils.git@main#egg=hyperliquid-utils
