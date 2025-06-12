@@ -4,3 +4,5 @@ matplotlib
 selenium
 webdriver-manager
 streamlit-aggrid
+openai
+streamlit-chat
