@@ -1,8 +1,6 @@
 streamlit
-selenium
-webdriver-manager
 pandas
 matplotlib
-hyperliquid-utils
+selenium
+webdriver-manager
 st-aggrid
-git+https://github.com/your-org/hyperliquid-utils.git@main#egg=hyperliquid-utils
