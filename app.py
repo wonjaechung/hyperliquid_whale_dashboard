@@ -4,7 +4,7 @@ import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 from collections import Counter, defaultdict
-from hyperliquid.utils import constants
+from hyperliquid.utils.constants import MAINNET_API_URL
 from st_aggrid import AgGrid, GridOptionsBuilder, DataReturnMode, GridUpdateMode
 
 
