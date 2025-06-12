@@ -8,7 +8,7 @@ from hyperliquid.utils import constants
 from st_aggrid import AgGrid, GridOptionsBuilder, DataReturnMode, GridUpdateMode
 
 # ── AI Tutor imports ─────────────────────────────────────────────────────────
-import openai
+from openai import OpenAI
 from streamlit_chat import message
 
 # ── Configuration ──────────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ BASE_URL = constants.MAINNET_API_URL
 
 # ── OpenAI 설정 ───────────────────────────────────────────────────────────
 # OpenAI 세팅
-openai.api_key = st.secrets["openai"]["api_key"]
+client = OpenAI(api_key=st.secrets["openai"]["api_key"])
 MODEL_NAME = "gpt-4o-mini"
 
 # ── HTTP helpers ───────────────────────────────────────────────────────────
@@ -413,18 +413,18 @@ if st.sidebar.button("전송", key="send_q"):
         f"질문: {user_q}\n"
         "전문용어 없이, 가장 쉬운 말로 설명해주세요."
     )
-    resp = openai.ChatCompletion.create(
+    resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role":"system","content":"당신은 중학생 수준으로 설명하는 AI 튜터입니다."},
-            {"role":"user","content":prompt}
+            {"role": "system", "content": "당신은 중학생도 이해할 수 있게 설명하는 친절한 AI 어시스턴트입니다."},
+            {"role": "user", "content": f"다음 지갑들의 PnL 통계를 설명해줘: {wallets_to_show}"}
         ],
-        temperature=0.7
+        temperature=0.7,
     )
-    answer = resp.choices[0].message.content.strip()
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-    st.session_state.chat_history.append((user_q, answer))
+    
+    insight = resp.choices[0].message.content
+    st.markdown("## 🤖 AI 주간 인사이트")
+    st.write(insight)
 
 # display chat history
 if "chat_history" in st.session_state:
