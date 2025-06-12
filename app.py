@@ -7,11 +7,16 @@ from collections import Counter, defaultdict
 from hyperliquid.utils import constants
 from st_aggrid import AgGrid, GridOptionsBuilder, DataReturnMode, GridUpdateMode
 
+# ── AI Tutor imports ─────────────────────────────────────────────────────────
+import openai
+from streamlit_chat import message
 
 # ── Configuration ──────────────────────────────────────────────────────────
 CSV_PATH = "top30_wallets.csv"
 BASE_URL = constants.MAINNET_API_URL
 
+# ── OpenAI 설정 ───────────────────────────────────────────────────────────
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 # ── HTTP helpers ───────────────────────────────────────────────────────────
 def info_http(payload: dict):
@@ -24,7 +29,6 @@ def get_portfolio(wallet: str):
 
 def get_clearinghouse_state(wallet: str):
     return info_http({"type": "clearinghouseState", "user": wallet})
-
 
 # ── Load leaderboard with Unrealized PnL ────────────────────────────────────
 @st.cache_data(ttl=600)
@@ -46,8 +50,7 @@ def load_leaderboard():
         "ROI","Volume","Unrealized PnL"
     ]]
 
-
-# ── Top-10 summary ─────────────────────────────────────────────────────────v
+# ── Top-10 summary ─────────────────────────────────────────────────────────
 @st.cache_data(ttl=600)
 def compute_top10_summary(wallets):
     periods = [("All-Time","allTime"),("24H","day"),
@@ -92,9 +95,7 @@ df_leader     = load_leaderboard()
 top_n         = 10
 wallets_top10 = df_leader["Wallet"].head(top_n).tolist()
 
-#
-# ── Custom Report 섹션 (직접 입력) ────────────────────────────────────────
-#
+# ── Custom Report 섹션 ───────────────────────────────────────────────────────
 st.sidebar.markdown("## 📋 Custom Report")
 raw_text = st.sidebar.text_area(
     "Enter wallet addresses (one per line or comma-separated):",
@@ -102,7 +103,6 @@ raw_text = st.sidebar.text_area(
 ).strip()
 
 if st.sidebar.button("🖨️ Generate Report"):
-    # parse 입력
     custom_wallets = []
     if raw_text:
         custom_wallets = [
@@ -111,7 +111,6 @@ if st.sidebar.button("🖨️ Generate Report"):
             for w in part.split(",")
             if w.strip()
         ]
-
     if not custom_wallets:
         st.sidebar.warning("하나 이상의 지갑 주소를 입력해주세요.")
     else:
@@ -193,7 +192,6 @@ if st.sidebar.button("🖨️ Generate Report"):
         # show back button and stop further rendering
         st.button("← Back to Leaderboard", on_click=lambda: st.session_state.update({"search_addr": ""}))
         st.stop()
-#
 # ── leaderboard vs individual wallet 모드 ───────────────────────────────────
 #
 if search_input == "":
@@ -401,3 +399,34 @@ for entry in wallets_to_show:
         st.error(f"Error fetching positions for {wallet}: {e}")
 
     st.markdown("---")
+
+# ── AI Tutor Chat ──────────────────────────────────────────────────────────
+st.sidebar.markdown("## 🤖 AI 튜터에게 물어보기")
+user_q = st.sidebar.text_input("궁금한 점을 입력하세요…", key="user_q")
+if st.sidebar.button("전송", key="send_q"):
+    context = df_cust_summary.to_csv(index=False) if 'df_cust_summary' in locals() else ''
+    prompt = (
+        "당신은 중학생에게 금융 대시보드를 쉽게 설명하는 친절한 선생님입니다.\n"
+        f"데이터:\n```\n{context}\n```\n"
+        f"질문: {user_q}\n"
+        "전문용어 없이, 가장 쉬운 말로 설명해주세요."
+    )
+    resp = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role":"system","content":"당신은 중학생 수준으로 설명하는 AI 튜터입니다."},
+            {"role":"user","content":prompt}
+        ],
+        temperature=0.7
+    )
+    answer = resp.choices[0].message.content.strip()
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    st.session_state.chat_history.append((user_q, answer))
+
+# display chat history
+if "chat_history" in st.session_state:
+    for q, a in st.session_state.chat_history:
+        message(q, is_user=True)
+        message(a, is_user=False)
+
