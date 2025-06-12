@@ -1,0 +1,7 @@
+streamlit
+selenium
+webdriver-manager
+pandas
+matplotlib
+hyperliquid-utils
+st-aggrid
