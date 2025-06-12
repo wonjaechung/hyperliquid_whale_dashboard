@@ -17,7 +17,7 @@ BASE_URL = constants.MAINNET_API_URL
 
 # ── OpenAI 설정 ───────────────────────────────────────────────────────────
 # OpenAI 세팅
-openai.api_key = st.secrets["openai"]["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"]
+openai.api_key = st.secrets["openai"]["api_key"]
 MODEL_NAME = "gpt-4o-mini"
 
 # ── HTTP helpers ───────────────────────────────────────────────────────────
