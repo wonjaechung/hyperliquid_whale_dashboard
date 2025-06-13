@@ -6,3 +6,4 @@ webdriver-manager
 streamlit-aggrid
 openai
 streamlit-chat
+playwright==1.43.0
