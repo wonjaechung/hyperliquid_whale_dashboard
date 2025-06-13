@@ -1,6 +1,8 @@
 # scrape_leaderboard.py
 
 import time
+import tempfile
+import uuid
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -47,10 +49,18 @@ def parse_top30_with_wallet(driver):
 
 def main():
     options = webdriver.ChromeOptions()
-    # uncomment next line to hide the browser window
-    # options.add_argument("--headless")
+    # 필수 헤드리스 + 샌드박스 비활성화
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    
+    # 임시 유저 데이터 디렉토리
+    tmp_dir = tempfile.gettempdir() + "/selenium_" + uuid.uuid4().hex
+    options.add_argument(f"--user-data-dir={tmp_dir}")
+    
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     driver.get("https://app.hyperliquid.xyz/leaderboard")
+    
     switch_to_all_time(driver)
     df = parse_top30_with_wallet(driver)
     driver.quit()
