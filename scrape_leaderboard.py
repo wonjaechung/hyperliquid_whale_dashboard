@@ -20,15 +20,17 @@ def switch_to_all_time(driver):
 def parse_top30_with_wallet(driver):
     # 테이블 로드 대기
     try:
-        rows = WebDriverWait(driver, 20).until(
+        # 테이블이 뜰 때까지 최대 60초 대기
+        rows = WebDriverWait(driver, 60).until(
             EC.presence_of_all_elements_located((By.XPATH, "//table//tr"))
         )[1:11]
-    except TimeoutException:
+    except TimeoutException as e:
+        print("⚠️ 테이블 로드 타임아웃, 페이지 새로고침 후 재시도…", e)
         driver.refresh()
-        time.sleep(3)
-        rows = WebDriverWait(driver, 20).until(
+        time.sleep(5)
+        rows = WebDriverWait(driver, 60).until(
             EC.presence_of_all_elements_located((By.XPATH, "//table//tr"))
-        )[1:31]
+        )[1:11]
 
     data = []
     for idx, row in enumerate(rows, start=1):
