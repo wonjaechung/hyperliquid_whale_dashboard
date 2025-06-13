@@ -1,103 +1,51 @@
-import time
+# scrape_playwright.py
+import asyncio
 import pandas as pd
-import tempfile
-import uuid
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.common.exceptions import TimeoutException
+from playwright.async_api import async_playwright
 
-# 드라이버 세팅
-options = webdriver.ChromeOptions()
-options.add_argument("--headless=new")
-options.add_argument("--no-sandbox")
-options.add_argument("--disable-dev-shm-usage")
+async def main():
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch()
+        page = await browser.new_page()
+        await page.goto("https://app.hyperliquid.xyz/leaderboard", timeout=60000)
+        # All-time 뷰 클릭
+        await page.click("div.variant_black", timeout=15000)
+        await page.click("text=All-time", timeout=15000)
+        # 테이블 로딩
+        await page.wait_for_selector("table tr", timeout=30000)
 
-# 여기를 tempfile.mkdtemp() 로 바꿔서 런마다 완전 새 디렉토리 생성
-tmp_dir = tempfile.mkdtemp(prefix="selenium-user-data-")
-options.add_argument(f"--user-data-dir={tmp_dir}")
+        # 상위 30개 행 가져오기
+        rows = await page.query_selector_all("table tr")
+        records = []
+        for row in rows[1:31]:
+            cols = await row.query_selector_all("td")
+            # 트레이더 이름
+            trader = await cols[1].inner_text()
+            # 클릭해서 지갑 주소 가져오기
+            await cols[1].click()
+            await page.wait_for_load_state("networkidle")
+            wallet = page.url.split("/")[-1]
+            await page.go_back()
+            await page.wait_for_selector("table tr")
 
-driver = webdriver.Chrome(
-    service=Service(ChromeDriverManager().install()),
-    options=options
-)
-driver.get("https://app.hyperliquid.xyz/leaderboard")
-
-# All-time 뷰로 전환
-def switch_to_all_time():
-    dropdown = WebDriverWait(driver, 10).until(
-        EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, 'variant_black')]"))
-    )
-    dropdown.click()
-    time.sleep(1)
-    view_button = driver.find_element(By.XPATH, f"//div[contains(text(), 'All-time')]")
-    view_button.click()
-    time.sleep(3)
-
-# row 30개에서 Wallet 추출 (안정 버전)
-def parse_top30_with_wallet():
-    data = []
-
-    for i in range(1, 11):
-        try:
-            rows = WebDriverWait(driver, 10).until(
-                EC.presence_of_all_elements_located((By.XPATH, "//table//tr"))
-            )[1:31]
-
-            if i - 1 >= len(rows):
-                raise Exception("row index out of range")
-
-            cols = rows[i - 1].find_elements(By.TAG_NAME, "td")
-            trader_name = cols[1].text if len(cols) > 1 else "N/A"
-
-            # 클릭 → URL 추출
-            if cols[1].is_displayed() and cols[1].is_enabled():
-                cols[1].click()
-                time.sleep(2)
-                url = driver.current_url
-                wallet_address = url.split("/")[-1]
-                driver.back()
-                time.sleep(2)
-            else:
-                wallet_address = "N/A"
-
-            rows_after = WebDriverWait(driver, 10).until(
-                EC.presence_of_all_elements_located((By.XPATH, "//table//tr"))
-            )[1:31]
-            cols_after = rows_after[i - 1].find_elements(By.TAG_NAME, "td")
-
-            data.append({
-                "Trader":         trader_name,
-                "Wallet":         wallet_address,
-                "Account Value":  cols_after[2].text if len(cols_after) > 2 else "N/A",
-                "PNL":            cols_after[3].text if len(cols_after) > 3 else "N/A",
-                "ROI":            cols_after[4].text if len(cols_after) > 4 else "N/A",
-                "Volume":         cols_after[5].text if len(cols_after) > 5 else "N/A"
-            })
-            print(f"✅ row {i} 완료: {trader_name} ({wallet_address})")
-
-        except Exception as e:
-            print(f"❌ row {i} 지갑주소 추출 실패: {e}")
-            data.append({
-                "Trader":        f"Row{i}",
-                "Wallet":        "N/A",
-                "Account Value": "N/A",
-                "PNL":           "N/A",
-                "ROI":           "N/A",
-                "Volume":        "N/A"
+            # 나머지 컬럼들
+            acct = await cols[2].inner_text()
+            pnl  = await cols[3].inner_text()
+            roi  = await cols[4].inner_text()
+            vol  = await cols[5].inner_text()
+            records.append({
+                "Trader": trader,
+                "Wallet": wallet,
+                "Account Value": acct,
+                "PNL": pnl,
+                "ROI": roi,
+                "Volume": vol
             })
 
-    return data
+        df = pd.DataFrame(records)
+        df.to_csv("top30_wallets.csv", index=False)
+        print("✅ Saved top30_wallets.csv")
+        await browser.close()
 
-# 실행
-switch_to_all_time()
-data = parse_top30_with_wallet()
-driver.quit()
-
-# 저장 및 출력
-df = pd.DataFrame(data)
-df.to_csv("top30_wallets.csv", index=False)
-print(df)
+if __name__ == "__main__":
+    asyncio.run(main())
