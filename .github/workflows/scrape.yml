@@ -1,32 +1,40 @@
 name: scrape-hyperliquid
 
+# 반드시 쓰기 권한을 줘야 GITHUB_TOKEN 으로 커밋/푸시가 가능합니다
 permissions:
   contents: write
 
 on:
   schedule:
-    - cron: '*/5 * * * *'    # 매 5분마다 실행
-  workflow_dispatch:        # 수동 실행도 가능
+    # 매 5분마다 실행
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'  # Ubuntu 24.04 에서 지원되는 버전
+          python-version: '3.10'
 
       - name: Install dependencies
-        run: pip install selenium webdriver-manager pandas
+        run: |
+          pip install selenium webdriver-manager pandas
 
       - name: Run scraper
-        run: python scrape_leaderboard.py
+        run: python scrape_leaderboard.py | tee scrape.log
+
+      - name: Debug scrape log
+        if: failure()
+        run: cat scrape.log
 
       - name: Commit & Push CSV
         run: |
