@@ -17,8 +17,8 @@ def switch_to_all_time(driver):
     driver.find_element(By.XPATH, "//div[contains(text(),'All-time')]").click()
     time.sleep(3)
 
-def parse_top10_with_wallet(driver):
-    # 최대 10행 기다리기 (30초)
+def parse_top30_with_wallet(driver):
+
     try:
         rows = WebDriverWait(driver, 30).until(
             EC.presence_of_all_elements_located((By.XPATH, "//table//tr"))
