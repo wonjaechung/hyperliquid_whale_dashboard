@@ -1,4 +1,4 @@
-import time, tempfile, uuid
+import time
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -6,78 +6,88 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.common.exceptions import TimeoutException
 
-def switch_to_all_time(driver):
-    dropdown = WebDriverWait(driver, 15).until(
-        EC.element_to_be_clickable((By.XPATH, "//div[contains(@class,'variant_black')]"))
+# 드라이버 세팅
+options = webdriver.ChromeOptions()
+# options.add_argument("--headless")
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+driver.get("https://app.hyperliquid.xyz/leaderboard")
+
+# All-time 뷰로 전환
+def switch_to_all_time():
+    dropdown = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, 'variant_black')]"))
     )
     dropdown.click()
     time.sleep(1)
-    driver.find_element(By.XPATH, "//div[text()='All-time']").click()
+    view_button = driver.find_element(By.XPATH, f"//div[contains(text(), 'All-time')]")
+    view_button.click()
     time.sleep(3)
 
-def parse_top30_with_wallet(driver):
-    # 기다렸다가 table rows 로드
-    rows = WebDriverWait(driver, 30).until(
-        EC.presence_of_all_elements_located((By.XPATH, "//table//tr"))
-    )[1:11]
-
+# row 30개에서 Wallet 추출 (안정 버전)
+def parse_top30_with_wallet():
     data = []
-    for idx, row in enumerate(rows[:30], start=1):
-        cols = row.find_elements(By.TAG_NAME, "td")
-        trader = cols[1].text
-        # 클릭해서 URL 가져오기
+
+    for i in range(1, 11):
         try:
-            cols[1].click()
-            time.sleep(1)
-            wallet = driver.current_url.rsplit("/",1)[-1]
-        except Exception:
-            wallet = "N/A"
-        driver.back()
-        time.sleep(1)
-        # 뒷부분 데이터 다시 추출
-        refreshed = WebDriverWait(driver, 11).until(
-            EC.presence_of_all_elements_located((By.XPATH, "//table//tr"))
-        )
-        cols2 = refreshed[idx].find_elements(By.TAG_NAME, "td")
-        data.append({
-            "Trader":         trader,
-            "Wallet":         wallet,
-            "Account Value":  cols2[2].text,
-            "PNL":            cols2[3].text,
-            "ROI":            cols2[4].text,
-            "Volume":         cols2[5].text,
-        })
-        print(f"✅ row {idx}: {trader} / {wallet}")
-    return pd.DataFrame(data)
+            # row 재조회
+            rows = WebDriverWait(driver, 10).until(
+                EC.presence_of_all_elements_located((By.XPATH, "//table//tr"))
+            )[1:11]
 
-def main():
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    # 고유한 유저 데이터 디렉토리 지정
-    tmp_dir = tempfile.gettempdir() + "/selenium_" + uuid.uuid4().hex
-    options.add_argument(f"--user-data-dir={tmp_dir}")
+            if i - 1 >= len(rows):
+                raise Exception("row index out of range")
 
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=options
-    )
-    driver.get("https://app.hyperliquid.xyz/leaderboard")
+            cols = rows[i - 1].find_elements(By.TAG_NAME, "td")
+            trader_name = cols[1].text if len(cols) > 1 else "N/A"
 
-    try:
-        switch_to_all_time(driver)
-        df = parse_top30_with_wallet(driver)
-        df.to_csv("top30_wallets.csv", index=False)
-        print("✅ Saved top30_wallets.csv")
-    except TimeoutException as e:
-        print(f"❌ Timeout while loading leaderboard: {e}")
-    except Exception as e:
-        print(f"❌ Failed to parse top30: {e}")
-    finally:
-        driver.quit()
+            # 클릭 → URL 추출
+            if cols[1].is_displayed() and cols[1].is_enabled():
+                cols[1].click()
+                time.sleep(2)
+                url = driver.current_url
+                wallet_address = url.split("/")[-1]
+                driver.back()
+                time.sleep(2)
+            else:
+                wallet_address = "N/A"
 
-if __name__ == "__main__":
-    main()
+            # 뒤로 간 뒤 row 다시 가져오기
+            rows_after = WebDriverWait(driver, 10).until(
+                EC.presence_of_all_elements_located((By.XPATH, "//table//tr"))
+            )[1:11]
+            cols_after = rows_after[i - 1].find_elements(By.TAG_NAME, "td")
+
+            data.append({
+                "Trader": trader_name,
+                "Wallet": wallet_address,
+                "Account Value": cols_after[2].text if len(cols_after) > 2 else "N/A",
+                "PNL": cols_after[3].text if len(cols_after) > 3 else "N/A",
+                "ROI": cols_after[4].text if len(cols_after) > 4 else "N/A",
+                "Volume": cols_after[5].text if len(cols_after) > 5 else "N/A"
+            })
+
+            print(f"✅ row {i} 완료: {trader_name} ({wallet_address})")
+
+        except Exception as e:
+            print(f"❌ row {i} 지갑주소 추출 실패: {e}")
+            data.append({
+                "Trader": f"Row{i}",
+                "Wallet": "N/A",
+                "Account Value": "N/A",
+                "PNL": "N/A",
+                "ROI": "N/A",
+                "Volume": "N/A"
+            })
+
+    return data
+
+# 실행
+switch_to_all_time()
+data = parse_top30_with_wallet()
+driver.quit()
+
+# 저장 및 출력
+df = pd.DataFrame(data)
+df.to_csv("top30_wallets2.csv", index=False)
+print(df)
