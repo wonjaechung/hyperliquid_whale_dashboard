@@ -1,5 +1,8 @@
 name: scrape-hyperliquid
 
+permissions:
+  contents: write
+
 on:
   schedule:
     - cron: '*/5 * * * *'    # 매 5분마다 실행
@@ -10,8 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           persist-credentials: true
 
