@@ -1,103 +1,40 @@
-import time, tempfile, uuid, traceback
+#!/usr/bin/env python3
+import requests
 import pandas as pd
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.common.exceptions import TimeoutException
+from hyperliquid.utils import constants
 
-def switch_to_all_time(driver):
-    # 드롭다운 누르고 All-time 선택
-    dropdown = WebDriverWait(driver, 20).until(
-        EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, 'variant_black')]"))
-    )
-    dropdown.click()
-    time.sleep(1)
-    driver.find_element(By.XPATH, "//div[contains(text(),'All-time')]").click()
-    time.sleep(3)
+# ── Configuration ──────────────────────────────────────────────────────────
+BASE_URL    = constants.MAINNET_API_URL
+CSV_PATH    = "top30_wallets.csv"
+LIMIT       = 10
 
-def parse_top30_with_wallet(driver):
-    # 페이지 소스 일부 찍어보기
-    html = driver.page_source
-    print("---- page_source[0:500] ----")
-    print(html[:500].replace('\n',' '))
-    print("-----------------------------")
-
-    try:
-        # 테이블 행 로딩 대기 (최대 30초)
-        rows = WebDriverWait(driver, 30).until(
-            EC.presence_of_all_elements_located((By.XPATH, "//table//tr"))
-        )[1:11]
-    except TimeoutException:
-        print("⚠️ 테이블 로드 타임아웃, 페이지소스 다시 찍고 새로고침 후 재시도…")
-        traceback.print_exc()
-        # 디버깅용 전체 페이지소스
-        with open("page_debug.html", "w", encoding="utf-8") as f:
-            f.write(driver.page_source)
-        driver.refresh()
-        time.sleep(5)
-        rows = WebDriverWait(driver, 30).until(
-            EC.presence_of_all_elements_located((By.XPATH, "//table//tr"))
-        )[1:11]
-
-    data = []
-    for i, row in enumerate(rows, start=1):
-        cols = row.find_elements(By.TAG_NAME, "td")
-        trader = cols[1].text if len(cols) > 1 else "N/A"
-        # 클릭 → 지갑주소
-        try:
-            cols[1].click()
-            time.sleep(2)
-            wallet = driver.current_url.split("/")[-1]
-        except Exception as e:
-            print(f"⚠️ row {i} 클릭 실패:", e)
-            wallet = "N/A"
-        driver.back()
-        time.sleep(2)
-
-        # 뒤로 와서 다시 같은 행 가져오기
-        all_rows = WebDriverWait(driver, 10).until(
-            EC.presence_of_all_elements_located((By.XPATH, "//table//tr"))
-        )
-        cols2 = all_rows[i].find_elements(By.TAG_NAME, "td")
-        data.append({
-            "Trader":         trader,
-            "Wallet":         wallet,
-            "Account Value":  cols2[2].text if len(cols2)>2 else "N/A",
-            "PNL":            cols2[3].text if len(cols2)>3 else "N/A",
-            "ROI":            cols2[4].text if len(cols2)>4 else "N/A",
-            "Volume":         cols2[5].text if len(cols2)>5 else "N/A"
-        })
-        print(f"✅ row {i}: {trader} / {wallet}")
-    return pd.DataFrame(data)
+# ── Fetch top-30 All-Time leaderboard via REST API ─────────────────────────
+def fetch_top30_all_time():
+    # API 엔드포인트 예: GET /leaderboard/allTime?limit=30
+    url = f"{BASE_URL}/leaderboard/allTime"
+    params = {"limit": LIMIT}
+    resp = requests.get(url, params=params)
+    resp.raise_for_status()
+    data = resp.json()  # 리스트 of dicts
+    
+    # 필요한 필드만 뽑아서 DataFrame으로
+    df = pd.DataFrame(data)
+    df = df.rename(columns={
+        "trader":         "Trader",
+        "wallet":         "Wallet",
+        "accountValue":   "Account Value",
+        "pnl":            "PNL",
+        "roi":            "ROI",
+        "volume":         "Volume"
+    })
+    # 혹시 순위 컬럼이 없으면 생성
+    df.insert(0, "Rank", range(1, len(df)+1))
+    return df[["Rank","Trader","Wallet","Account Value","PNL","ROI","Volume"]]
 
 def main():
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    # 각 실행마다 고유 user-data-dir 사용
-    tmp_dir = tempfile.gettempdir() + "/sel_" + uuid.uuid4().hex
-    options.add_argument(f"--user-data-dir={tmp_dir}")
-
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=options
-    )
-    driver.get("https://app.hyperliquid.xyz/leaderboard")
-
-    try:
-        switch_to_all_time(driver)
-        df = parse_top30_with_wallet(driver)
-        df.to_csv("top30_wallets.csv", index=False)
-        print("✅ Saved top30_wallets.csv")
-    except Exception as e:
-        print("❌ Failed to parse top30:", e)
-        traceback.print_exc()
-    finally:
-        driver.quit()
+    df = fetch_top30_all_time()
+    df.to_csv(CSV_PATH, index=False)
+    print(f"✅ Saved {CSV_PATH} (fetched {len(df)} rows)")
 
 if __name__ == "__main__":
     main()
